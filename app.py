@@ -245,6 +245,50 @@ def login():
 
 
 # ----------------------------------------------------------------------------
+# Client pings (no login needed, so they work even when login can't)
+# ----------------------------------------------------------------------------
+def _clean(v, n=60):
+    return "".join(ch for ch in str(v) if ch.isprintable())[:n] or "-"
+
+
+def _client_key_ok(d):
+    required = env("CLIENT_KEY")
+    return not required or hmac.compare_digest(str(d.get("ClientKey", "")), required)
+
+
+@app.route("/api/client/open", methods=["POST"])
+def client_open():
+    """Game just launched (before login)."""
+    d = request.get_json(silent=True) or {}
+    if not _client_key_ok(d):
+        return jsonify({"Error": "Unauthorized"}), 401
+    log_discord("Game opened", {
+        "Device": _clean(d.get("Device")),
+        "Build": _clean(d.get("BuildHash")),
+        "Version": _clean(d.get("Version")),
+        "OS": _clean(d.get("OS")),
+        "Session": _clean(d.get("Session"), 12),
+    }, 0x5865F2)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/client/report", methods=["POST"])
+def client_report():
+    """Game hit a connection problem (can't reach backend / Photon)."""
+    d = request.get_json(silent=True) or {}
+    if not _client_key_ok(d):
+        return jsonify({"Error": "Unauthorized"}), 401
+    log_discord("Connection problem", {
+        "Where": _clean(d.get("Where")),
+        "Reason": _clean(d.get("Reason"), 120),
+        "Attempt": _clean(d.get("Attempt")),
+        "Auto-fix": _clean(d.get("Fix")),
+        "Device": _clean(d.get("Device")),
+        "Session": _clean(d.get("Session"), 12),
+    }, YELLOW)
+    return jsonify({"status": "ok"})
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
